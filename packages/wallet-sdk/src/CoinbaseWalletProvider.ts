@@ -138,11 +138,20 @@ export function extractRSFromSig(base64Signature: string): {
   return { r, s };
 }
 
-export async function signWithPasskey(base64Hash: string): Promise<Hex> {
+export async function signWithPasskey(
+  base64Hash: string,
+  credentialId: string
+): Promise<Hex> {
   const options = await generateAuthenticationOptions({
     rpID: window.location.hostname,
     challenge: base64Hash,
     userVerification: "preferred",
+    allowCredentials: [
+      {
+        id: credentialId,
+        transports: ["internal"],
+      },
+    ],
   });
   options.challenge = base64Hash;
 
@@ -276,6 +285,7 @@ export class CoinbaseWalletProvider
   private signer: Signer | null;
   protected accounts: AddressString[] = [];
   protected chain: Chain;
+  lastCredentialId?: string;
 
   constructor({
     metadata,
@@ -329,7 +339,11 @@ export class CoinbaseWalletProvider
       console.log("userOpHash", hash);
       console.log("base64 userOpHash", base64Hash);
 
-      const signature = await signWithPasskey(base64Hash);
+      console.log("lastCredentialId", this.lastCredentialId);
+      const signature = await signWithPasskey(
+        base64Hash,
+        this.lastCredentialId as string
+      );
       console.log("passkey signature", signature);
 
       const { sessionManagerOwnerIndex, session } = decodePermissionsContext(
@@ -388,6 +402,8 @@ export class CoinbaseWalletProvider
         )[];
         const credential = await createCredential({ name: "[DEMO APP]" });
         console.log("new passkey credential", credential);
+        this.lastCredentialId = credential.id;
+        console.log("lastCredentialId", this.lastCredentialId);
 
         const encodedPublicKey = encodeAbiParameters(
           [
@@ -426,12 +442,6 @@ export class CoinbaseWalletProvider
         const signer = this.initSigner(signerType);
         const accounts = await signer.handshake({ requests: updatedRequests });
         console.log("wallet_connect response", accounts);
-        const grantPermissionsRes = accounts.requestResponses[1];
-        console.log("grantPermissions inner response", grantPermissionsRes);
-        const decodedContext = decodePermissionsContext(
-          grantPermissionsRes.permissionsContext
-        );
-        console.log("received decodedContext", decodedContext);
 
         this.emit(
           "accountsChanged",
