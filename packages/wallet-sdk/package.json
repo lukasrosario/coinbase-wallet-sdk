@@ -1,6 +1,6 @@
 {
-  "name": "@coinbase/wallet-sdk",
-  "version": "4.0.4",
+  "name": "@lukasrosario/wallet-sdk",
+  "version": "4.0.4-sessionkeys.6",
   "description": "Coinbase Wallet JavaScript SDK",
   "keywords": [
     "coinbase",
@@ -28,12 +28,16 @@
     "lint": "eslint . --ext .ts,.tsx --fix"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^10.0.0",
+    "@simplewebauthn/server": "^10.0.0",
     "buffer": "^6.0.3",
     "clsx": "^1.2.1",
     "eventemitter3": "^5.0.1",
     "keccak": "^3.0.3",
     "preact": "^10.16.0",
-    "sha.js": "^2.4.11"
+    "sha.js": "^2.4.11",
+    "viem": "^2.17.3",
+    "webauthn-p256": "^0.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.22.9",

@@ -1,4 +1,5 @@
 import { LIB_VERSION } from '../version';
+import { SESSION_KEY_SERVER_URL } from ':core/constants';
 import { standardErrors } from ':core/error';
 import { RequestArguments } from ':core/provider/interface';
 import { Chain } from ':core/type';
@@ -12,6 +13,22 @@ export async function fetchRPCRequest(request: RequestArguments, chain?: Chain) 
     id: crypto.randomUUID(),
   };
   const res = await window.fetch(chain.rpcUrl, {
+    method: 'POST',
+    body: JSON.stringify(requestBody),
+    mode: 'cors',
+    headers: { 'Content-Type': 'application/json', 'X-Cbw-Sdk-Version': LIB_VERSION },
+  });
+  const response = await res.json();
+  return response.result;
+}
+
+export async function fetchSessionKeyRPCRequest(request: RequestArguments) {
+  const requestBody = {
+    ...request,
+    jsonrpc: '2.0',
+    id: crypto.randomUUID(),
+  };
+  const res = await window.fetch(SESSION_KEY_SERVER_URL, {
     method: 'POST',
     body: JSON.stringify(requestBody),
     mode: 'cors',

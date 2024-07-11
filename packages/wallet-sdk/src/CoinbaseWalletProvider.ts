@@ -1,4 +1,5 @@
 import EventEmitter from 'eventemitter3';
+import { encodeAbiParameters, Hex, numberToHex, WalletGrantPermissionsParameters } from 'viem';
 
 import { standardErrorCodes, standardErrors } from './core/error';
 import { serializeError } from './core/error/serialize';
@@ -13,11 +14,19 @@ import { AddressString, Chain } from './core/type';
 import { areAddressArraysEqual, hexStringFromNumber } from './core/type/util';
 import { Signer } from './sign/interface';
 import { createSigner, fetchSignerType, loadSignerType, storeSignerType } from './sign/util';
-import { checkErrorForInvalidRequestArgs, fetchRPCRequest } from './util/provider';
+import {
+  checkErrorForInvalidRequestArgs,
+  fetchRPCRequest,
+  fetchSessionKeyRPCRequest,
+} from './util/provider';
 import { Communicator } from ':core/communicator/Communicator';
 import { SignerType } from ':core/message';
-import { determineMethodCategory } from ':core/provider/method';
+import { determineMethodCategory, SendCallsParams } from ':core/provider/method';
+import { signWithPasskey } from ':util/passkeySigning';
 import { ScopedLocalStorage } from ':util/ScopedLocalStorage';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { createCredential } = require('webauthn-p256');
 
 export class CoinbaseWalletProvider extends EventEmitter implements ProviderInterface {
   private readonly metadata: AppMetadata;
@@ -27,6 +36,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
   private signer: Signer | null;
   protected accounts: AddressString[] = [];
   protected chain: Chain;
+  lastCredentialId?: string;
 
   constructor({ metadata, preference: { keysUrl, ...preference } }: Readonly<ConstructorOptions>) {
     super();
@@ -59,15 +69,57 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
 
   protected readonly handlers = {
     // eth_requestAccounts
-    handshake: async (_: RequestArguments): Promise<AddressString[]> => {
+    handshake: async (args: RequestArguments): Promise<any> => {
       if (this.connected) {
         this.emit('connect', { chainId: hexStringFromNumber(this.chain.id) });
-        return this.accounts;
+        return { addresses: this.accounts };
       }
+
+      const requests = (args.params as { requests: any }).requests as (
+        | {
+            method: 'wallet_grantPermissions';
+            params: WalletGrantPermissionsParameters;
+          }
+        | { method: 'personal_sign'; params: [Hex] }
+      )[];
+
+      const credential = await createCredential({ name: '[DEMO APP]' });
+      this.lastCredentialId = credential.id;
+
+      const encodedPublicKey = encodeAbiParameters(
+        [
+          { name: 'x', type: 'uint256' },
+          { name: 'y', type: 'uint256' },
+        ],
+        [credential.publicKey.x, credential.publicKey.y]
+      );
+
+      const updatedRequests = await Promise.all(
+        requests.map(async (request) => {
+          if (request.method === 'wallet_grantPermissions') {
+            if (request.params.signer?.type === 'wallet') {
+              return {
+                ...request,
+                params: {
+                  ...request.params,
+                  signer: {
+                    type: 'passkey',
+                    data: {
+                      publicKey: encodedPublicKey,
+                      credentialId: credential.id,
+                    },
+                  },
+                },
+              };
+            }
+          }
+          return request;
+        })
+      );
 
       const signerType = await this.requestSignerSelection();
       const signer = this.initSigner(signerType);
-      const accounts = await signer.handshake();
+      const accounts = await signer.handshake({ requests: updatedRequests });
 
       this.signer = signer;
       storeSignerType(signerType);
@@ -86,6 +138,46 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
     },
 
     fetch: (request: RequestArguments) => fetchRPCRequest(request, this.chain),
+
+    signOrFetch: async (request: RequestArguments) => {
+      if (!this.connected || !this.signer) {
+        throw standardErrors.provider.unauthorized(
+          "Must call 'eth_requestAccounts' before other methods"
+        );
+      }
+      if (request.method === 'wallet_sendCalls') {
+        const params = (request.params as SendCallsParams)[0];
+        const hasPermissionsContext = !!params.capabilities?.permissions?.context;
+        if (hasPermissionsContext) {
+          const result = await fetchSessionKeyRPCRequest({
+            ...request,
+            method: 'wallet_fillUserOp',
+          });
+          if (!result.userOp || !result.hash) {
+            throw standardErrors.rpc.internal('Failed to fill user op');
+          }
+          const { authenticatorData, clientDataJSON, signature } = await signWithPasskey(
+            result.hash,
+            this.lastCredentialId as string
+          );
+          const callsId = await fetchSessionKeyRPCRequest({
+            method: 'wallet_sendUserOpWithSignature',
+            params: {
+              chainId: numberToHex(this.chain.id),
+              userOp: result.userOp,
+              signature: {
+                authenticatorData,
+                clientDataJSON,
+                signature,
+              },
+            },
+          });
+          return callsId;
+        }
+        return await this.signer.request(request);
+      }
+      throw standardErrors.provider.unsupportedMethod();
+    },
 
     state: (request: RequestArguments) => {
       const getConnectedAccounts = (): AddressString[] => {

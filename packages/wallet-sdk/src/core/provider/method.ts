@@ -1,5 +1,5 @@
 const mapping = {
-  handshake: ['eth_requestAccounts'],
+  handshake: ['eth_requestAccounts', 'wallet_connect'],
   sign: [
     'eth_ecRecover',
     'personal_sign',
@@ -14,7 +14,6 @@ const mapping = {
     'wallet_switchEthereumChain',
     'wallet_watchAsset',
     'wallet_getCapabilities',
-    'wallet_sendCalls',
     'wallet_showCallsStatus',
   ],
   state: [
@@ -27,6 +26,7 @@ const mapping = {
   deprecated: ['eth_sign', 'eth_signTypedData_v2'],
   unsupported: ['eth_subscribe', 'eth_unsubscribe'],
   fetch: [],
+  signOrFetch: ['wallet_sendCalls'],
 } as const;
 
 export type MethodCategory = keyof typeof mapping;
@@ -41,3 +41,14 @@ export function determineMethodCategory(method: string): MethodCategory | undefi
   }
   return undefined;
 }
+
+export type SendCallsParams = [
+  {
+    capabilities?: {
+      permissions?: {
+        context?: string;
+        credentialId?: string;
+      };
+    };
+  },
+];
