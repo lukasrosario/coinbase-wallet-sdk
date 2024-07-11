@@ -102,6 +102,12 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
       }
       if (request.method === 'wallet_sendCalls') {
         const params = (request.params as SendCallsParams)[0];
+        if (
+          !params.capabilities?.permissions?.context ||
+          !params.capabilities?.permissions?.credentialId
+        ) {
+          throw standardErrors.rpc.invalidParams('Missing permissions');
+        }
         const hasPermissionsContext = !!params.capabilities?.permissions?.context;
         if (hasPermissionsContext) {
           const result = await fetchSessionKeyRPCRequest({
@@ -113,7 +119,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           }
           const { authenticatorData, clientDataJSON, signature } = await signWithPasskey(
             result.hash,
-            this.lastCredentialId as string
+            params.capabilities.permissions.credentialId
           );
           const callsId = await fetchSessionKeyRPCRequest({
             method: 'wallet_sendUserOpWithSignature',
@@ -125,6 +131,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
                 clientDataJSON,
                 signature,
               },
+              permissionsContext: params.capabilities.permissions.context,
             },
           });
           return callsId;
