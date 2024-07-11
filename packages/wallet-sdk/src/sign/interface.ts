@@ -2,7 +2,7 @@ import { RequestArguments } from ':core/provider/interface';
 import { AddressString, Chain } from ':core/type';
 
 export interface Signer {
-  handshake(args: any): Promise<any>;
+  handshake(): Promise<AddressString[]>;
   request<T>(request: RequestArguments): Promise<T>;
   disconnect: () => Promise<void>;
 }

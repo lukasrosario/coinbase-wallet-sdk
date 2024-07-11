@@ -46,11 +46,11 @@ export class SCWSigner implements Signer {
     this.decryptResponseMessage = this.decryptResponseMessage.bind(this);
   }
 
-  async handshake(args: any): Promise<AddressString[]> {
+  async handshake(): Promise<AddressString[]> {
     const handshakeMessage = await this.createRequestMessage({
       handshake: {
-        method: 'wallet_connect',
-        params: { ...this.metadata, ...args },
+        method: 'eth_requestAccounts',
+        params: this.metadata,
       },
     });
     const response: RPCResponseMessage =
@@ -62,12 +62,12 @@ export class SCWSigner implements Signer {
     await this.keyManager.setPeerPublicKey(peerPublicKey);
 
     const decrypted = await this.decryptResponseMessage<AddressString[]>(response);
-    this.updateInternalState({ method: 'wallet_connect', params: args }, decrypted);
+    this.updateInternalState({ method: 'eth_requestAccounts' }, decrypted);
 
     const result = decrypted.result;
     if ('error' in result) throw result.error;
 
-    return (decrypted.result as { value: any }).value;
+    return this.stateManager.accounts;
   }
 
   async request<T>(request: RequestArguments): Promise<T> {
@@ -189,11 +189,6 @@ export class SCWSigner implements Signer {
     switch (request.method as Method) {
       case 'eth_requestAccounts': {
         const accounts = result.value as AddressString[];
-        this.stateManager.updateAccounts(accounts);
-        break;
-      }
-      case 'wallet_connect': {
-        const accounts = (result.value as any).addresses as AddressString[];
         this.stateManager.updateAccounts(accounts);
         break;
       }

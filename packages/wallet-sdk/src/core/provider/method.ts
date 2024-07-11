@@ -1,5 +1,5 @@
 const mapping = {
-  handshake: ['eth_requestAccounts', 'wallet_connect'],
+  handshake: ['eth_requestAccounts'],
   sign: [
     'eth_ecRecover',
     'personal_sign',

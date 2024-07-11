@@ -1,5 +1,5 @@
 import EventEmitter from 'eventemitter3';
-import { encodeAbiParameters, Hex, numberToHex, WalletGrantPermissionsParameters } from 'viem';
+import { numberToHex } from 'viem';
 
 import { standardErrorCodes, standardErrors } from './core/error';
 import { serializeError } from './core/error/serialize';
@@ -24,9 +24,6 @@ import { SignerType } from ':core/message';
 import { determineMethodCategory, SendCallsParams } from ':core/provider/method';
 import { signWithPasskey } from ':util/passkeySigning';
 import { ScopedLocalStorage } from ':util/ScopedLocalStorage';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { createCredential } = require('webauthn-p256');
 
 export class CoinbaseWalletProvider extends EventEmitter implements ProviderInterface {
   private readonly metadata: AppMetadata;
@@ -69,57 +66,15 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
 
   protected readonly handlers = {
     // eth_requestAccounts
-    handshake: async (args: RequestArguments): Promise<any> => {
+    handshake: async (_: RequestArguments): Promise<AddressString[]> => {
       if (this.connected) {
         this.emit('connect', { chainId: hexStringFromNumber(this.chain.id) });
-        return { addresses: this.accounts };
+        return this.accounts;
       }
-
-      const requests = (args.params as { requests: any }).requests as (
-        | {
-            method: 'wallet_grantPermissions';
-            params: WalletGrantPermissionsParameters;
-          }
-        | { method: 'personal_sign'; params: [Hex] }
-      )[];
-
-      const credential = await createCredential({ name: '[DEMO APP]' });
-      this.lastCredentialId = credential.id;
-
-      const encodedPublicKey = encodeAbiParameters(
-        [
-          { name: 'x', type: 'uint256' },
-          { name: 'y', type: 'uint256' },
-        ],
-        [credential.publicKey.x, credential.publicKey.y]
-      );
-
-      const updatedRequests = await Promise.all(
-        requests.map(async (request) => {
-          if (request.method === 'wallet_grantPermissions') {
-            if (request.params.signer?.type === 'wallet') {
-              return {
-                ...request,
-                params: {
-                  ...request.params,
-                  signer: {
-                    type: 'passkey',
-                    data: {
-                      publicKey: encodedPublicKey,
-                      credentialId: credential.id,
-                    },
-                  },
-                },
-              };
-            }
-          }
-          return request;
-        })
-      );
 
       const signerType = await this.requestSignerSelection();
       const signer = this.initSigner(signerType);
-      const accounts = await signer.handshake({ requests: updatedRequests });
+      const accounts = await signer.handshake();
 
       this.signer = signer;
       storeSignerType(signerType);
