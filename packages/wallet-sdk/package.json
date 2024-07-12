@@ -1,6 +1,6 @@
 {
   "name": "@lukasrosario/wallet-sdk",
-  "version": "4.0.4-permissionedkeys.1",
+  "version": "4.0.4-permissionedkeys.2",
   "description": "Coinbase Wallet JavaScript SDK",
   "keywords": [
     "coinbase",
