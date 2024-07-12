@@ -16,8 +16,8 @@ import { Signer } from './sign/interface';
 import { createSigner, fetchSignerType, loadSignerType, storeSignerType } from './sign/util';
 import {
   checkErrorForInvalidRequestArgs,
+  fetchPermissionsRPCRequest,
   fetchRPCRequest,
-  fetchSessionKeyRPCRequest,
 } from './util/provider';
 import { Communicator } from ':core/communicator/Communicator';
 import { SignerType } from ':core/message';
@@ -110,7 +110,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
         }
         const hasPermissionsContext = !!params.capabilities?.permissions?.context;
         if (hasPermissionsContext) {
-          const fillUserOp = await fetchSessionKeyRPCRequest({
+          const fillUserOp = await fetchPermissionsRPCRequest({
             ...request,
             method: 'wallet_fillUserOp',
           });
@@ -121,7 +121,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
             fillUserOp.base64Hash,
             params.capabilities.permissions.credentialId
           );
-          const sendUserOpWithSignature = await fetchSessionKeyRPCRequest({
+          const sendUserOpWithSignature = await fetchPermissionsRPCRequest({
             method: 'wallet_sendUserOpWithSignature',
             params: {
               chainId: numberToHex(this.chain.id),

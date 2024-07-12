@@ -1,5 +1,5 @@
 import { LIB_VERSION } from '../version';
-import { SESSION_KEY_SERVER_URL } from ':core/constants';
+import { PERMISSIONS_SERVER_URL } from ':core/constants';
 import { standardErrors } from ':core/error';
 import { RequestArguments } from ':core/provider/interface';
 import { Chain } from ':core/type';
@@ -22,13 +22,13 @@ export async function fetchRPCRequest(request: RequestArguments, chain?: Chain) 
   return response.result;
 }
 
-export async function fetchSessionKeyRPCRequest(request: RequestArguments) {
+export async function fetchPermissionsRPCRequest(request: RequestArguments) {
   const requestBody = {
     ...request,
     jsonrpc: '2.0',
     id: crypto.randomUUID(),
   };
-  const res = await window.fetch(SESSION_KEY_SERVER_URL, {
+  const res = await window.fetch(PERMISSIONS_SERVER_URL, {
     method: 'POST',
     body: JSON.stringify(requestBody),
     mode: 'cors',
