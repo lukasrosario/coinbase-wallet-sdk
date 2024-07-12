@@ -1,42 +1,31 @@
-import EventEmitter from "eventemitter3";
-import { numberToHex } from "viem";
+import EventEmitter from 'eventemitter3';
+import { numberToHex } from 'viem';
 
-import { standardErrorCodes, standardErrors } from "./core/error";
-import { serializeError } from "./core/error/serialize";
+import { standardErrorCodes, standardErrors } from './core/error';
+import { serializeError } from './core/error/serialize';
 import {
   AppMetadata,
   ConstructorOptions,
   Preference,
   ProviderInterface,
   RequestArguments,
-} from "./core/provider/interface";
-import { AddressString, Chain } from "./core/type";
-import { areAddressArraysEqual, hexStringFromNumber } from "./core/type/util";
-import { Signer } from "./sign/interface";
-import {
-  createSigner,
-  fetchSignerType,
-  loadSignerType,
-  storeSignerType,
-} from "./sign/util";
+} from './core/provider/interface';
+import { AddressString, Chain } from './core/type';
+import { areAddressArraysEqual, hexStringFromNumber } from './core/type/util';
+import { Signer } from './sign/interface';
+import { createSigner, fetchSignerType, loadSignerType, storeSignerType } from './sign/util';
 import {
   checkErrorForInvalidRequestArgs,
   fetchRPCRequest,
   fetchSessionKeyRPCRequest,
-} from "./util/provider";
-import { Communicator } from ":core/communicator/Communicator";
-import { SignerType } from ":core/message";
-import {
-  determineMethodCategory,
-  SendCallsParams,
-} from ":core/provider/method";
-import { signWithPasskey } from ":util/passkeySigning";
-import { ScopedLocalStorage } from ":util/ScopedLocalStorage";
+} from './util/provider';
+import { Communicator } from ':core/communicator/Communicator';
+import { SignerType } from ':core/message';
+import { determineMethodCategory, SendCallsParams } from ':core/provider/method';
+import { signWithPasskey } from ':util/passkeySigning';
+import { ScopedLocalStorage } from ':util/ScopedLocalStorage';
 
-export class CoinbaseWalletProvider
-  extends EventEmitter
-  implements ProviderInterface
-{
+export class CoinbaseWalletProvider extends EventEmitter implements ProviderInterface {
   private readonly metadata: AppMetadata;
   private readonly preference: Preference;
   private readonly communicator: Communicator;
@@ -46,10 +35,7 @@ export class CoinbaseWalletProvider
   protected chain: Chain;
   lastCredentialId?: string;
 
-  constructor({
-    metadata,
-    preference: { keysUrl, ...preference },
-  }: Readonly<ConstructorOptions>) {
+  constructor({ metadata, preference: { keysUrl, ...preference } }: Readonly<ConstructorOptions>) {
     super();
     this.metadata = metadata;
     this.preference = preference;
@@ -70,7 +56,7 @@ export class CoinbaseWalletProvider
     try {
       checkErrorForInvalidRequestArgs(args);
       // unrecognized methods are treated as fetch requests
-      const category = determineMethodCategory(args.method) ?? "fetch";
+      const category = determineMethodCategory(args.method) ?? 'fetch';
       return this.handlers[category](args) as T;
     } catch (error) {
       this.handleUnauthorizedError(error);
@@ -82,7 +68,7 @@ export class CoinbaseWalletProvider
     // eth_requestAccounts
     handshake: async (_: RequestArguments): Promise<AddressString[]> => {
       if (this.connected) {
-        this.emit("connect", { chainId: hexStringFromNumber(this.chain.id) });
+        this.emit('connect', { chainId: hexStringFromNumber(this.chain.id) });
         return this.accounts;
       }
 
@@ -93,7 +79,7 @@ export class CoinbaseWalletProvider
       this.signer = signer;
       storeSignerType(signerType);
 
-      this.emit("connect", { chainId: hexStringFromNumber(this.chain.id) });
+      this.emit('connect', { chainId: hexStringFromNumber(this.chain.id) });
       return accounts;
     },
 
@@ -114,34 +100,29 @@ export class CoinbaseWalletProvider
           "Must call 'eth_requestAccounts' before other methods"
         );
       }
-      if (request.method === "wallet_sendCalls") {
+      if (request.method === 'wallet_sendCalls') {
         const params = (request.params as SendCallsParams)[0];
         if (
           !params.capabilities?.permissions?.context ||
           !params.capabilities?.permissions?.credentialId
         ) {
-          throw standardErrors.rpc.invalidParams("Missing permissions");
+          throw standardErrors.rpc.invalidParams('Missing permissions');
         }
-        const hasPermissionsContext =
-          !!params.capabilities?.permissions?.context;
+        const hasPermissionsContext = !!params.capabilities?.permissions?.context;
         if (hasPermissionsContext) {
           const fillUserOp = await fetchSessionKeyRPCRequest({
             ...request,
-            method: "wallet_fillUserOp",
+            method: 'wallet_fillUserOp',
           });
-          if (
-            !fillUserOp.userOp ||
-            !fillUserOp.hash ||
-            !fillUserOp.base64Hash
-          ) {
-            throw standardErrors.rpc.internal("Failed to fill user op");
+          if (!fillUserOp.userOp || !fillUserOp.hash || !fillUserOp.base64Hash) {
+            throw standardErrors.rpc.internal('Failed to fill user op');
           }
           const signature = await signWithPasskey(
             fillUserOp.base64Hash,
             params.capabilities.permissions.credentialId
           );
           const sendUserOpWithSignature = await fetchSessionKeyRPCRequest({
-            method: "wallet_sendUserOpWithSignature",
+            method: 'wallet_sendUserOpWithSignature',
             params: {
               chainId: numberToHex(this.chain.id),
               userOp: fillUserOp.userOp,
@@ -164,13 +145,13 @@ export class CoinbaseWalletProvider
         );
       };
       switch (request.method) {
-        case "eth_chainId":
+        case 'eth_chainId':
           return hexStringFromNumber(this.chain.id);
-        case "net_version":
+        case 'net_version':
           return this.chain.id;
-        case "eth_accounts":
+        case 'eth_accounts':
           return getConnectedAccounts();
-        case "eth_coinbase":
+        case 'eth_coinbase':
           return getConnectedAccounts()[0];
         default:
           return this.handlers.unsupported(request);
@@ -178,15 +159,11 @@ export class CoinbaseWalletProvider
     },
 
     deprecated: ({ method }: RequestArguments) => {
-      throw standardErrors.rpc.methodNotSupported(
-        `Method ${method} is deprecated.`
-      );
+      throw standardErrors.rpc.methodNotSupported(`Method ${method} is deprecated.`);
     },
 
     unsupported: ({ method }: RequestArguments) => {
-      throw standardErrors.rpc.methodNotSupported(
-        `Method ${method} is not supported.`
-      );
+      throw standardErrors.rpc.methodNotSupported(`Method ${method} is not supported.`);
     },
   };
 
@@ -201,7 +178,7 @@ export class CoinbaseWalletProvider
       `.enable() has been deprecated. Please use .request({ method: "eth_requestAccounts" }) instead.`
     );
     return await this.request({
-      method: "eth_requestAccounts",
+      method: 'eth_requestAccounts',
     });
   }
 
@@ -210,10 +187,7 @@ export class CoinbaseWalletProvider
     this.chain = { id: 1 };
     this.signer?.disconnect();
     ScopedLocalStorage.clearAll();
-    this.emit(
-      "disconnect",
-      standardErrors.provider.disconnected("User initiated disconnection")
-    );
+    this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
   }
 
   readonly isCoinbaseWallet = true;
@@ -222,13 +196,12 @@ export class CoinbaseWalletProvider
     onAccountsUpdate: (accounts: AddressString[]) => {
       if (areAddressArraysEqual(this.accounts, accounts)) return;
       this.accounts = accounts;
-      this.emit("accountsChanged", this.accounts);
+      this.emit('accountsChanged', this.accounts);
     },
     onChainUpdate: (chain: Chain) => {
-      if (chain.id === this.chain.id && chain.rpcUrl === this.chain.rpcUrl)
-        return;
+      if (chain.id === this.chain.id && chain.rpcUrl === this.chain.rpcUrl) return;
       this.chain = chain;
-      this.emit("chainChanged", hexStringFromNumber(chain.id));
+      this.emit('chainChanged', hexStringFromNumber(chain.id));
     },
   };
 
