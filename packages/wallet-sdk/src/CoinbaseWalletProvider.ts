@@ -1,5 +1,5 @@
 import EventEmitter from 'eventemitter3';
-import { numberToHex } from 'viem';
+import { Address, Hex, numberToHex } from 'viem';
 
 import { standardErrorCodes, standardErrors } from './core/error';
 import { serializeError } from './core/error/serialize';
@@ -22,8 +22,10 @@ import {
 import { Communicator } from ':core/communicator/Communicator';
 import { SignerType } from ':core/message';
 import { determineMethodCategory, SendCallsParams } from ':core/provider/method';
-import { signWithPasskey } from ':util/passkeySigning';
 import { ScopedLocalStorage } from ':util/ScopedLocalStorage';
+import { getCombinedPublicKey } from ':util/signing';
+import { signWithLocalKey } from ':util/signing';
+import { attemptToGetKey, getKeyForAddress, storeKeyForAddress } from ':util/storage';
 
 export class CoinbaseWalletProvider extends EventEmitter implements ProviderInterface {
   private readonly metadata: AppMetadata;
@@ -89,6 +91,39 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           "Must call 'eth_requestAccounts' before other methods"
         );
       }
+      if (
+        request.method === 'wallet_grantPermissions' &&
+        (request.params as { permissions: { signer: { type: string } }[] }[])[0].permissions[0]
+          .signer.type === 'wallet'
+      ) {
+        const { publicKey, privateKey } = await crypto.subtle.generateKey(
+          { name: 'ECDSA', namedCurve: 'P-256' },
+          false,
+          ['sign']
+        );
+        const combinedPubKey = await getCombinedPublicKey(publicKey);
+        const response = (await this.signer.request({
+          ...request,
+          params: {
+            permissions: [
+              {
+                ...(request.params as { permissions: { signer: { type: string } }[] }[])[0]
+                  .permissions[0],
+                signer: {
+                  type: 'passkey',
+                  data: {
+                    publicKey: combinedPubKey,
+                  },
+                },
+              },
+            ],
+          },
+        })) as { context: Hex }[];
+
+        await storeKeyForAddress(this.accounts[0] as Address, privateKey, response[0].context);
+
+        return response[0];
+      }
       return await this.signer.request(request);
     },
 
@@ -102,32 +137,35 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
       }
       if (request.method === 'wallet_sendCalls') {
         const params = (request.params as SendCallsParams)[0];
-        if (
-          !params.capabilities?.permissions?.context ||
-          !params.capabilities?.permissions?.credentialId
-        ) {
-          throw standardErrors.rpc.invalidParams('Missing permissions');
-        }
-        const hasPermissionsContext = !!params.capabilities?.permissions?.context;
-        if (hasPermissionsContext) {
+        const localKey = await getKeyForAddress(this.accounts[0] as Address);
+        if (localKey) {
           const fillUserOp = await fetchPermissionsRPCRequest({
             ...request,
             method: 'wallet_fillUserOp',
+            params: [
+              {
+                ...params,
+                capabilities: {
+                  ...params.capabilities,
+                  permissions: {
+                    ...params.capabilities?.permissions,
+                    context: localKey.permissionsContext,
+                  },
+                },
+              },
+            ],
           });
           if (!fillUserOp.userOp || !fillUserOp.hash || !fillUserOp.base64Hash) {
             throw standardErrors.rpc.internal('Failed to fill user op');
           }
-          const signature = await signWithPasskey(
-            fillUserOp.base64Hash,
-            params.capabilities.permissions.credentialId
-          );
+          const signature = await signWithLocalKey(fillUserOp.base64Hash, localKey.key);
           const sendUserOpWithSignature = await fetchPermissionsRPCRequest({
             method: 'wallet_sendUserOpWithSignature',
             params: {
               chainId: numberToHex(this.chain.id),
               userOp: fillUserOp.userOp,
               signature,
-              permissionsContext: params.capabilities.permissions.context,
+              permissionsContext: localKey.permissionsContext,
             },
           });
           return sendUserOpWithSignature.callsId;
@@ -137,9 +175,23 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
       throw standardErrors.provider.unsupportedMethod();
     },
 
-    state: (request: RequestArguments) => {
-      const getConnectedAccounts = (): AddressString[] => {
+    state: async (request: RequestArguments) => {
+      const getConnectedAccounts = async (): Promise<AddressString[]> => {
         if (this.connected) return this.accounts;
+        const localKey = await attemptToGetKey();
+        if (localKey) {
+          this.emit('connect', { chainId: hexStringFromNumber(this.chain.id) });
+          const accounts = [localKey.address];
+          this.accounts = accounts;
+
+          const signer = this.initSigner('scw');
+          await signer.handshake(accounts);
+
+          this.signer = signer;
+          storeSignerType('scw');
+
+          return accounts;
+        }
         throw standardErrors.provider.unauthorized(
           "Must call 'eth_requestAccounts' before other methods"
         );
@@ -150,9 +202,9 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
         case 'net_version':
           return this.chain.id;
         case 'eth_accounts':
-          return getConnectedAccounts();
+          return await getConnectedAccounts();
         case 'eth_coinbase':
-          return getConnectedAccounts()[0];
+          return (await getConnectedAccounts())[0];
         default:
           return this.handlers.unsupported(request);
       }

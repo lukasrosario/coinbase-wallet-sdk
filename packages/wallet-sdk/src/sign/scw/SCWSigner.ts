@@ -46,7 +46,12 @@ export class SCWSigner implements Signer {
     this.decryptResponseMessage = this.decryptResponseMessage.bind(this);
   }
 
-  async handshake(): Promise<AddressString[]> {
+  async handshake(accounts?: AddressString[]): Promise<AddressString[]> {
+    if (accounts) {
+      this.stateManager.updateAccounts(accounts);
+      return accounts;
+    }
+
     const handshakeMessage = await this.createRequestMessage({
       handshake: {
         method: 'eth_requestAccounts',
