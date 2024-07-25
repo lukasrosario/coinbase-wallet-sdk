@@ -1,5 +1,5 @@
 import EventEmitter from 'eventemitter3';
-import { Address, Hex, numberToHex } from 'viem';
+import { Address, checksumAddress, Hex, numberToHex } from 'viem';
 
 import { standardErrorCodes, standardErrors } from './core/error';
 import { serializeError } from './core/error/serialize';
@@ -201,6 +201,30 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           "Must call 'eth_requestAccounts' before other methods"
         );
       };
+      const getActivePermissions = async () => {
+        if (!this.connected) {
+          throw standardErrors.provider.unauthorized(
+            "Must call 'eth_requestAccounts' before other methods"
+          );
+        }
+        if (!request.params || !Array.isArray(request.params) || request.params.length === 0) {
+          throw standardErrors.rpc.invalidParams();
+        }
+        if (
+          !this.accounts.some(
+            (address) =>
+              checksumAddress(address as Address) ===
+              checksumAddress((request.params as Address[])[0])
+          )
+        ) {
+          throw standardErrors.provider.unauthorized('Address not connected');
+        }
+        const key = await getKeyForAddress(checksumAddress((request.params as Address[])[0]));
+        return {
+          permissions: key.permissions,
+          context: key.permissionsContext,
+        };
+      };
       switch (request.method) {
         case 'eth_chainId':
           return hexStringFromNumber(this.chain.id);
@@ -211,12 +235,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
         case 'eth_coinbase':
           return (await getConnectedAccounts())[0];
         case 'wallet_getActivePermissions':
-          if (!this.connected) {
-            throw standardErrors.provider.unauthorized(
-              "Must call 'eth_requestAccounts' before other methods"
-            );
-          }
-          return (await getKeyForAddress(this.accounts[0] as Address)).permissions;
+          return await getActivePermissions();
         default:
           return this.handlers.unsupported(request);
       }
