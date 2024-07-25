@@ -17,10 +17,11 @@ async function getDatabase() {
 export async function storeKeyForAddress(
   address: Address,
   key: CryptoKey,
-  permissionsContext: Hex
+  permissionsContext: Hex,
+  permissions: unknown[]
 ) {
   const db = await getDatabase();
-  await db.put('keys', { address: checksumAddress(address), key, permissionsContext });
+  await db.put('keys', { address: checksumAddress(address), key, permissionsContext, permissions });
 }
 
 export async function getKeyForAddress(address: Address) {

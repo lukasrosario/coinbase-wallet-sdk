@@ -23,6 +23,7 @@ const mapping = {
     'eth_accounts',
     'eth_coinbase',
     'net_version',
+    'wallet_getActivePermissions',
   ],
   deprecated: ['eth_sign', 'eth_signTypedData_v2'],
   unsupported: ['eth_subscribe', 'eth_unsubscribe'],

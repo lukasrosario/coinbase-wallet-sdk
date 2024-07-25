@@ -93,8 +93,8 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
       }
       if (
         request.method === 'wallet_grantPermissions' &&
-        (request.params as { permissions: { signer: { type: string } }[] }[])[0].permissions[0]
-          .signer.type === 'wallet'
+        (request.params as { permissions: { signer: { type: string } }[] }).permissions[0].signer
+          .type === 'wallet'
       ) {
         const { publicKey, privateKey } = await crypto.subtle.generateKey(
           { name: 'ECDSA', namedCurve: 'P-256' },
@@ -102,25 +102,30 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           ['sign']
         );
         const combinedPubKey = await getCombinedPublicKey(publicKey);
+        const updatedPermissions = [
+          {
+            ...(request.params as { permissions: { signer: { type: string } }[] }).permissions[0],
+            signer: {
+              type: 'passkey',
+              data: {
+                publicKey: combinedPubKey,
+              },
+            },
+          },
+        ];
         const response = (await this.signer.request({
           ...request,
           params: {
-            permissions: [
-              {
-                ...(request.params as { permissions: { signer: { type: string } }[] }[])[0]
-                  .permissions[0],
-                signer: {
-                  type: 'passkey',
-                  data: {
-                    publicKey: combinedPubKey,
-                  },
-                },
-              },
-            ],
+            permissions: updatedPermissions,
           },
         })) as { context: Hex }[];
 
-        await storeKeyForAddress(this.accounts[0] as Address, privateKey, response[0].context);
+        await storeKeyForAddress(
+          this.accounts[0] as Address,
+          privateKey,
+          response[0].context,
+          updatedPermissions
+        );
 
         return response[0];
       }
@@ -205,6 +210,13 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           return await getConnectedAccounts();
         case 'eth_coinbase':
           return (await getConnectedAccounts())[0];
+        case 'wallet_getActivePermissions':
+          if (!this.connected) {
+            throw standardErrors.provider.unauthorized(
+              "Must call 'eth_requestAccounts' before other methods"
+            );
+          }
+          return (await getKeyForAddress(this.accounts[0] as Address)).permissions;
         default:
           return this.handlers.unsupported(request);
       }

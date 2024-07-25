@@ -1,1 +1,1 @@
-export const LIB_VERSION = '4.0.4-permissionedkeysalpha.4';
+export const LIB_VERSION = '4.0.4-permissionedkeysalpha.6';
