@@ -94,7 +94,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
       if (
         request.method === 'wallet_grantPermissions' &&
         (request.params as { permissions: { signer: { type: string } }[] }).permissions[0].signer
-          .type === 'wallet'
+          .type === 'provider'
       ) {
         const { publicKey, privateKey } = await crypto.subtle.generateKey(
           { name: 'ECDSA', namedCurve: 'P-256' },
@@ -106,7 +106,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           {
             ...(request.params as { permissions: { signer: { type: string } }[] }).permissions[0],
             signer: {
-              type: 'passkey',
+              type: 'p256',
               data: {
                 publicKey: combinedPubKey,
               },
@@ -127,7 +127,7 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           updatedPermissions
         );
 
-        return response[0];
+        return response;
       }
       return await this.signer.request(request);
     },
@@ -220,10 +220,12 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
           throw standardErrors.provider.unauthorized('Address not connected');
         }
         const key = await getKeyForAddress(checksumAddress((request.params as Address[])[0]));
-        return {
-          permissions: key.permissions,
-          context: key.permissionsContext,
-        };
+        return [
+          {
+            permissions: key.permissions,
+            context: key.permissionsContext,
+          },
+        ];
       };
       switch (request.method) {
         case 'eth_chainId':
