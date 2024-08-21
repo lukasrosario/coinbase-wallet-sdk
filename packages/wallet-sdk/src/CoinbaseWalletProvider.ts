@@ -1,5 +1,5 @@
 import EventEmitter from 'eventemitter3';
-import { Address, checksumAddress, Hex, numberToHex } from 'viem';
+import { Address, checksumAddress, numberToHex } from 'viem';
 
 import { standardErrorCodes, standardErrors } from './core/error';
 import { serializeError } from './core/error/serialize';
@@ -23,9 +23,8 @@ import { Communicator } from ':core/communicator/Communicator';
 import { SignerType } from ':core/message';
 import { determineMethodCategory, SendCallsParams } from ':core/provider/method';
 import { ScopedLocalStorage } from ':util/ScopedLocalStorage';
-import { getCombinedPublicKey } from ':util/signing';
 import { signWithLocalKey } from ':util/signing';
-import { attemptToGetKey, getKeyForAddress, storeKeyForAddress } from ':util/storage';
+import { attemptToGetKey, getKeyForAddress } from ':util/storage';
 
 export class CoinbaseWalletProvider extends EventEmitter implements ProviderInterface {
   private readonly metadata: AppMetadata;
@@ -90,44 +89,6 @@ export class CoinbaseWalletProvider extends EventEmitter implements ProviderInte
         throw standardErrors.provider.unauthorized(
           "Must call 'eth_requestAccounts' before other methods"
         );
-      }
-      if (
-        request.method === 'wallet_grantPermissions' &&
-        (request.params as { permissions: { signer: { type: string } }[] }).permissions[0].signer
-          .type === 'provider'
-      ) {
-        const { publicKey, privateKey } = await crypto.subtle.generateKey(
-          { name: 'ECDSA', namedCurve: 'P-256' },
-          false,
-          ['sign']
-        );
-        const combinedPubKey = await getCombinedPublicKey(publicKey);
-        const updatedPermissions = [
-          {
-            ...(request.params as { permissions: { signer: { type: string } }[] }).permissions[0],
-            signer: {
-              type: 'p256',
-              data: {
-                publicKey: combinedPubKey,
-              },
-            },
-          },
-        ];
-        const response = (await this.signer.request({
-          ...request,
-          params: {
-            permissions: updatedPermissions,
-          },
-        })) as { context: Hex }[];
-
-        await storeKeyForAddress(
-          this.accounts[0] as Address,
-          privateKey,
-          response[0].context,
-          updatedPermissions
-        );
-
-        return response;
       }
       return await this.signer.request(request);
     },
