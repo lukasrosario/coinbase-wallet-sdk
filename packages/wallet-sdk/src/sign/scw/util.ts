@@ -5,15 +5,9 @@ export function isPresigned(request: RequestArguments): boolean {
     throw new Error('Invalid method for isPresigned()');
   }
 
-  const { params } = request;
+  const { params } = request as {
+    params: { capabilities: { permissions: { preparedCalls: object } } }[];
+  };
 
-  return Boolean(
-    params &&
-      typeof params === 'object' &&
-      'capabilities' in params &&
-      typeof params.capabilities === 'object' &&
-      params.capabilities &&
-      'presigned' in params.capabilities &&
-      params.capabilities.presigned
-  );
+  return Boolean(params[0].capabilities.permissions.preparedCalls);
 }

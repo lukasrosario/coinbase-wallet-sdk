@@ -19,7 +19,6 @@ const ACTIVE_CHAIN_STORAGE_KEY = 'activeChain';
 const AVAILABLE_CHAINS_STORAGE_KEY = 'availableChains';
 const WALLET_CAPABILITIES_STORAGE_KEY = 'walletCapabilities';
 import { LIB_VERSION } from '../../version';
-import { isPresigned } from './util';
 
 type Chain = {
   id: number;
@@ -129,9 +128,12 @@ export class SCWSigner implements Signer {
       case 'wallet_switchEthereumChain':
         return this.handleSwitchChainRequest(request);
       case 'wallet_sendCalls':
-        if (isPresigned(request)) return fetchRPCRequest(request, PERMISSIONS_BACKEND_URL);
         return this.sendRequestToPopup(request);
       case 'wallet_prepareCalls':
+        return fetchRPCRequest(request, PERMISSIONS_BACKEND_URL);
+      case 'wallet_sendPreparedCalls':
+        return fetchRPCRequest(request, PERMISSIONS_BACKEND_URL);
+      case 'wallet_getCallsStatus':
         return fetchRPCRequest(request, PERMISSIONS_BACKEND_URL);
       case 'eth_ecRecover':
       case 'personal_sign':
