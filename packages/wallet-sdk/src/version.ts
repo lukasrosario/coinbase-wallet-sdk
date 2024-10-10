@@ -1,1 +1,1 @@
-export const LIB_VERSION = '4.1.0-sessionkeys.2';
+export const LIB_VERSION = '4.1.0-sessionkeyslocal.30';

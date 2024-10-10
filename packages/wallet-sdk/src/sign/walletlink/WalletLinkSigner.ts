@@ -61,6 +61,10 @@ export class WalletLinkSigner implements Signer {
     await this._eth_requestAccounts();
   }
 
+  async walletConnect(_params: unknown) {
+    return;
+  }
+
   private get selectedAddress(): AddressString | undefined {
     return this._addresses[0] || undefined;
   }
@@ -363,7 +367,9 @@ export class WalletLinkSigner implements Signer {
 
   private async _eth_requestAccounts() {
     if (this._addresses.length > 0) {
-      this.callback?.('connect', { chainId: hexStringFromNumber(this.getChainId()) });
+      this.callback?.('connect', {
+        chainId: hexStringFromNumber(this.getChainId()),
+      });
       return this._addresses;
     }
 
@@ -376,7 +382,9 @@ export class WalletLinkSigner implements Signer {
     }
 
     this._setAddresses(res.result);
-    this.callback?.('connect', { chainId: hexStringFromNumber(this.getChainId()) });
+    this.callback?.('connect', {
+      chainId: hexStringFromNumber(this.getChainId()),
+    });
     return this._addresses;
   }
 

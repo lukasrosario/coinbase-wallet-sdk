@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { Signer } from '../interface';
 import { SCWKeyManager } from './SCWKeyManager';
 import { Communicator } from ':core/communicator/Communicator';
@@ -41,6 +42,7 @@ export class SCWSigner implements Signer {
   private callback: ProviderEventCallback | null;
 
   private accounts: AddressString[];
+  private walletConnectResponse: { accounts: AddressString[] };
   private chain: Chain;
 
   private constructor(params: ConstructorOptions) {
@@ -52,6 +54,7 @@ export class SCWSigner implements Signer {
 
     // default values
     this.accounts = [];
+    this.walletConnectResponse = { accounts: [] };
     this.chain = {
       id: params.metadata.appChainIds?.[0] ?? 1,
     };
@@ -106,6 +109,36 @@ export class SCWSigner implements Signer {
     this.callback?.('accountsChanged', accounts);
   }
 
+  async walletConnect(params: unknown) {
+    const handshakeMessage = await this.createRequestMessage({
+      handshake: {
+        method: 'wallet_connect',
+        params: {
+          ...this.metadata,
+          permissions: (params as { permissions: unknown[] })?.permissions,
+        },
+      },
+    });
+    const response: RPCResponseMessage =
+      await this.communicator.postRequestAndWaitForResponse(handshakeMessage);
+
+    // store peer's public key
+    if ('failure' in response.content) throw response.content.failure;
+    const peerPublicKey = await importKeyFromHexString('public', response.sender);
+    await this.keyManager.setPeerPublicKey(peerPublicKey);
+
+    const decrypted = await this.decryptResponseMessage(response);
+
+    const result = decrypted.result;
+    if ('error' in result) throw result.error;
+
+    const accounts = (result.value as { accounts: AddressString[] }).accounts as AddressString[];
+    this.walletConnectResponse = result.value as { accounts: AddressString[] };
+    this.accounts = accounts;
+    await this.storage.storeObject(ACCOUNTS_KEY, accounts);
+    this.callback?.('accountsChanged', accounts);
+  }
+
   async request(request: RequestArguments) {
     if (this.accounts.length === 0) {
       throw standardErrors.provider.unauthorized();
@@ -113,8 +146,15 @@ export class SCWSigner implements Signer {
 
     switch (request.method) {
       case 'eth_requestAccounts':
-        this.callback?.('connect', { chainId: hexStringFromNumber(this.chain.id) });
+        this.callback?.('connect', {
+          chainId: hexStringFromNumber(this.chain.id),
+        });
         return this.accounts;
+      case 'wallet_connect':
+        this.callback?.('connect', {
+          chainId: hexStringFromNumber(this.chain.id),
+        });
+        return this.walletConnectResponse;
       case 'eth_accounts':
         return this.accounts;
       case 'eth_coinbase':
@@ -148,7 +188,6 @@ export class SCWSigner implements Signer {
       case 'wallet_watchAsset':
       case 'wallet_showCallsStatus':
       case 'wallet_grantPermissions':
-        return this.sendRequestToPopup(request);
       default:
         if (!this.chain.rpcUrl) throw standardErrors.rpc.internal('No RPC URL set for chain');
         return fetchRPCRequest(request, this.chain.rpcUrl);
@@ -233,7 +272,9 @@ export class SCWSigner implements Signer {
       content,
       sdkVersion: LIB_VERSION,
       timestamp: new Date(),
-      ...(this.metadata.appDeeplinkUrl && { callbackUrl: this.metadata.appDeeplinkUrl }),
+      ...(this.metadata.appDeeplinkUrl && {
+        callbackUrl: this.metadata.appDeeplinkUrl,
+      }),
     };
   }
 

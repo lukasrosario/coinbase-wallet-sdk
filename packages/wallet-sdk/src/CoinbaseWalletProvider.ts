@@ -56,6 +56,14 @@ export class CoinbaseWalletProvider extends ProviderEventEmitter implements Prov
             storeSignerType(signerType);
             break;
           }
+          case 'wallet_connect': {
+            const signerType = await this.requestSignerSelection();
+            const signer = await this.initSigner(signerType);
+            await signer?.walletConnect(args.params);
+            this.signer = signer;
+            storeSignerType(signerType);
+            break;
+          }
           case 'net_version':
             return 1; // default value
           case 'eth_chainId':

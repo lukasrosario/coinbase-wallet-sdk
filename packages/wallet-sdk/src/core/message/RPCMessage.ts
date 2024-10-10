@@ -53,7 +53,12 @@ export interface MobileRPCResponseMessage extends RPCMessage {
       };
 }
 
-type RequestAccountsAction = {
-  method: 'eth_requestAccounts';
-  params: AppMetadata;
-};
+type RequestAccountsAction =
+  | {
+      method: 'eth_requestAccounts';
+      params: AppMetadata;
+    }
+  | {
+      method: 'wallet_connect';
+      params: AppMetadata & { permissions: unknown[] };
+    };
